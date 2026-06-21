@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PM
+  INTERNAL
+  CLIENT_GUEST
+}
+
+enum Department {
+  UI_UX
+  FRONTEND
+  BACKEND
+}
+
+enum TaskStatus {
+  BACKLOG
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+/// Application-layer constraints:
+/// - A User with role PM or CLIENT_GUEST must have department: null.
+/// - A User with role INTERNAL must have a non-null department.
+/// - All queries against this soft-deletable model must include where: { deletedAt: null }.
+model User {
+  id         String      @id @default(uuid())
+  name       String
+  email      String      @unique
+  password   String
+  role       Role
+  department Department?
+  avatarUrl  String?     @map("avatar_url")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  deletedAt  DateTime?   @map("deleted_at")
+
+  assignedTasks       Task[]       @relation("TaskAssignee")
+  clientProjects      Project[]    @relation("ProjectClient")
+  auditLogs           AuditLog[]
+  uploadedAttachments Attachment[] @relation("AttachmentUploader")
+
+  @@map("users")
+}
+
+/// Application-layer constraints:
+/// - clientId must reference a User with role CLIENT_GUEST.
+/// - All queries against this soft-deletable model must include where: { deletedAt: null }.
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  clientId    String    @map("client_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  client User   @relation("ProjectClient", fields: [clientId], references: [id])
+  tasks  Task[]
+
+  @@map("projects")
+}
+
+/// Application-layer constraints:
+/// - version must be read from DB before any Task update and sent back in the update request body.
+/// - If the request version does not match the DB version, reject with HTTP 409.
+/// - Increment version by 1 on every successful update.
+/// - All queries against this soft-deletable model must include where: { deletedAt: null }.
+model Task {
+  id              String     @id @default(uuid())
+  projectId       String     @map("project_id")
+  title           String
+  description     String?
+  status          TaskStatus @default(BACKLOG)
+  assigneeId      String?    @map("assignee_id")
+  isClientVisible Boolean    @default(false) @map("is_client_visible")
+  version         Int        @default(1)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at")
+
+  project                  Project          @relation(fields: [projectId], references: [id])
+  assignee                 User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  attachments              Attachment[]
+  auditLogs                AuditLog[]
+  dependentDependencies    TaskDependency[] @relation("DependentTask")
+  prerequisiteDependencies TaskDependency[] @relation("PrerequisiteTask")
+
+  @@map("tasks")
+}
+
+model TaskDependency {
+  id              String   @id @default(uuid())
+  taskId          String   @map("task_id")
+  dependsOnTaskId String   @map("depends_on_task_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  task          Task @relation("DependentTask", fields: [taskId], references: [id])
+  dependsOnTask Task @relation("PrerequisiteTask", fields: [dependsOnTaskId], references: [id])
+
+  @@unique([taskId, dependsOnTaskId])
+  @@map("task_dependencies")
+}
+
+/// Application-layer constraints:
+/// - All queries against this soft-deletable model must include where: { deletedAt: null }.
+model Attachment {
+  id           String    @id @default(uuid())
+  taskId       String    @map("task_id")
+  uploadedById String    @map("uploaded_by_id")
+  fileName     String    @map("file_name")
+  fileUrl      String    @map("file_url")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  task       Task @relation(fields: [taskId], references: [id])
+  uploadedBy User @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@map("attachments")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  taskId       String   @map("task_id")
+  userId       String   @map("user_id")
+  changedField String   @map("changed_field")
+  oldValue     String?  @map("old_value")
+  newValue     String?  @map("new_value")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("audit_logs")
+}
