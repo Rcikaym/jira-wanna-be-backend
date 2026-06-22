@@ -59,7 +59,12 @@ function toMaskableClientTask(task: ClientTask) {
 export const clientService = {
   async listProjects(user: UserContext) {
     assertClientGuest(user);
-    return clientRepository.findProjects(user.id);
+    const projects = await clientRepository.findProjects(user.id);
+    return Promise.all(
+      projects.map((project) =>
+        clientRepository.getProjectSummary(project.id, user.id),
+      ),
+    );
   },
 
   async getProjectSummary(projectId: string, user: UserContext) {

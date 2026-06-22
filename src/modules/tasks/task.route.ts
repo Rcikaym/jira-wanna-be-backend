@@ -9,6 +9,7 @@ import {
   createTaskHandler,
   deleteTaskHandler,
   getAttachmentsHandler,
+  getDependenciesHandler,
   getTaskHandler,
   listTasksHandler,
   removeDependencyHandler,
@@ -30,6 +31,7 @@ taskRouter.patch(
   updateTaskStatusHandler,
 );
 taskRouter.post("/:taskId/assign", requireRole("PM"), assignTaskHandler);
+taskRouter.get("/:taskId/dependencies", getDependenciesHandler);
 taskRouter.post("/:taskId/dependencies", requireRole("PM"), addDependencyHandler);
 taskRouter.delete(
   "/:taskId/dependencies/:dependsOnTaskId",

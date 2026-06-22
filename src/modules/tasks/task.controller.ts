@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../../lib/errors";
 import { parseEzFilterParams } from "../../lib/ezfilter";
 import type { AppEnv } from "../../middleware/auth.middleware";
@@ -18,6 +19,7 @@ import {
   deleteTask,
   getAttachments,
   getTask,
+  getTaskDependencies,
   listTasks,
   removeDependency,
   updateTaskFields,
@@ -30,6 +32,16 @@ function handleError(error: unknown, c: Context): Response {
       { error: error.message, ...(error.code ? { code: error.code } : {}) },
       error.statusCode,
     );
+  }
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError ||
+    error instanceof Prisma.PrismaClientValidationError ||
+    error instanceof Prisma.PrismaClientInitializationError ||
+    error instanceof Prisma.PrismaClientRustPanicError
+  ) {
+    console.error("Prisma Error Occurred:", error.message);
+    return c.json({ error: "Database query failed", details: error.message }, 500);
   }
   console.error(error);
   return c.json({ error: "Internal server error" }, 500);
@@ -124,6 +136,23 @@ export async function assignTaskHandler(c: Context<AppEnv>): Promise<Response> {
     }
     const task = await assignTask(requiredParam(c, "taskId"), parsed.data, c.get("user").id);
     return c.json({ message: "Task assigned successfully", data: task });
+  } catch (error) {
+    return handleError(error, c);
+  }
+}
+
+export async function getDependenciesHandler(
+  c: Context<AppEnv>,
+): Promise<Response> {
+  try {
+    const dependencies = await getTaskDependencies(
+      requiredParam(c, "taskId"),
+      c.get("user"),
+    );
+    return c.json({
+      message: "Dependencies retrieved successfully",
+      data: dependencies,
+    });
   } catch (error) {
     return handleError(error, c);
   }

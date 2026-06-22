@@ -79,6 +79,11 @@ export async function listTasks(
   params: EzFilterParams,
   user: UserContext,
 ) {
+  const allowedOrderKeys = ["createdAt", "updatedAt", "title"];
+  if (params.orderKey && !allowedOrderKeys.includes(params.orderKey)) {
+    throw new AppError(400, `Invalid orderKey. Allowed values are: ${allowedOrderKeys.join(", ")}`);
+  }
+
   const baseWhere =
     user.role === "PM"
       ? { projectId, deletedAt: null }
@@ -327,6 +332,14 @@ export async function addDependency(
   }
 
   return dependency;
+}
+
+export async function getTaskDependencies(taskId: string, user: UserContext) {
+  const task = await taskRepository.findById(taskId);
+  if (!task) throw new AppError(404, "Task not found");
+  if (!canReadTask(user, task)) throw new AppError(403, "Access denied");
+
+  return taskRepository.getDependencies(taskId);
 }
 
 async function assertNoCircularDependency(
