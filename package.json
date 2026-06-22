@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "postinstall": "bunx prisma generate",
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "db:migrate": "bunx prisma migrate dev",
